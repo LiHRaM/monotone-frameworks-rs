@@ -20,8 +20,10 @@
 //! OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 //! SOFTWARE.
 
-use std::{cmp::Ordering, collections::HashSet};
+use std::collections::HashSet;
 
+/// A Lattice is a tuple (T, F) which is both a Lower and an Upper Semilattice.
+/// T is a partially ordered set, and F is a binary relation on that set.
 #[derive(Clone, Debug)]
 pub struct Lattice<T, F>
 where
@@ -41,16 +43,16 @@ where
 }
 
 /// The Join or Upper Semilattice.
-/// Every doubleton has a least upper bound.
 pub trait JoinSemilattice<'a, T> {
-    fn join(&self, a: &'a T, b: &'a T) -> Option<T>;
+    /// Find the least upper bound.
+    fn join(&self, a: &'a T, b: &'a T) -> T;
     fn bottom(&self) -> T;
 }
 
 /// The Meet or Lower Semilattice.
-/// every doubleton has a greatest lower bound.
 pub trait MeetSemilattice<'a, T> {
-    fn meet(&self, a: &'a T, b: &'a T) -> Option<T>;
+    /// Find the greatest lower bound for the doubleton.
+    fn meet(&self, a: &'a T, b: &'a T) -> T;
     fn top(&self) -> T;
 }
 
@@ -59,30 +61,21 @@ where
     T: Clone,
     F: Fn(&T, &T) -> bool,
 {
-    /// Find the least upper bound for a and b.
-    fn join(&self, a: &'a T, b: &'a T) -> Option<T> {
-        let bound = self
-            .set
+    fn join(&self, a: &'a T, b: &'a T) -> T {
+        self.set
             .iter()
             .filter(|el| self.relation(a, el) && self.relation(b, el))
-            .fold_first(|a, b| if self.relation(a, b) { a } else { b });
-        Some((*bound.unwrap()).clone())
+            .fold_first(|a, b| if self.relation(a, b) { a } else { b })
+            .unwrap()
+            .clone()
     }
 
     fn bottom(&self) -> T {
-        let mut elements: Vec<_> = self.set.iter().collect();
-        elements.sort_unstable_by(|a, b| {
-            if self.relation(b, a) {
-                if self.relation(a, b) {
-                    Ordering::Equal
-                } else {
-                    Ordering::Greater
-                }
-            } else {
-                Ordering::Less
-            }
-        });
-        elements[0].clone()
+        self.set
+            .iter()
+            .fold_first(|a, b| if self.relation(a, b) { a } else { b })
+            .unwrap()
+            .clone()
     }
 }
 
@@ -91,30 +84,21 @@ where
     T: Clone,
     F: Fn(&T, &T) -> bool,
 {
-    /// Find the greatest lower bound for a and b.
-    fn meet(&self, a: &'a T, b: &'a T) -> Option<T> {
-        let bound = self
-            .set
+    fn meet(&self, a: &'a T, b: &'a T) -> T {
+        self.set
             .iter()
             .filter(|el| self.relation(el, a) && self.relation(el, b))
-            .fold_first(|a, b| if self.relation(b, a) { a } else { b });
-        Some((*bound.unwrap()).clone())
+            .fold_first(|a, b| if self.relation(b, a) { a } else { b })
+            .unwrap()
+            .clone()
     }
 
     fn top(&self) -> T {
-        let mut elements: Vec<_> = self.set.iter().collect();
-        elements.sort_unstable_by(|a, b| {
-            if self.relation(a, b) {
-                if self.relation(b, a) {
-                    Ordering::Equal
-                } else {
-                    Ordering::Greater
-                }
-            } else {
-                Ordering::Less
-            }
-        });
-        elements[0].clone()
+        self.set
+            .iter()
+            .fold_first(|a, b| if self.relation(b, a) { a } else { b })
+            .unwrap()
+            .clone()
     }
 }
 
@@ -137,12 +121,12 @@ fn powerset_lattice() {
     };
 
     // For the powerset lattice, join should equal the union operation
-    assert_eq!(lattice.join(&vec![1], &vec![2]), Some(vec![1, 2]));
-    assert_eq!(lattice.join(&vec![1, 3], &vec![2]), Some(vec![1, 2, 3]));
+    assert_eq!(lattice.join(&vec![1], &vec![2]), vec![1, 2]);
+    assert_eq!(lattice.join(&vec![1, 3], &vec![2]), vec![1, 2, 3]);
 
     // For the powerset lattice, meet should equal the intersection operation
-    assert_eq!(lattice.meet(&vec![1], &vec![2]), Some(vec![]));
-    assert_eq!(lattice.meet(&vec![1, 2], &vec![2, 3]), Some(vec![2]));
+    assert_eq!(lattice.meet(&vec![1], &vec![2]), vec![]);
+    assert_eq!(lattice.meet(&vec![1, 2], &vec![2, 3]), vec![2]);
 
     assert_eq!(lattice.top(), vec![1, 2, 3]);
     assert_eq!(lattice.bottom(), vec![]);
