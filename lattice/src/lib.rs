@@ -19,11 +19,11 @@
 //! LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 //! OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 //! SOFTWARE.
+#![feature(iterator_fold_self)]
 
 use std::collections::HashSet;
 
-/// A Lattice is a tuple (T, F) which is both a Lower and an Upper Semilattice.
-/// T is a partially ordered set, and F is a binary relation on that set.
+/// A Lattice is a partial order (T, F) which is both a Lower and an Upper Semilattice.
 #[derive(Clone, Debug)]
 pub struct Lattice<T, F>
 where
@@ -37,6 +37,10 @@ impl<T, F> Lattice<T, F>
 where
     F: Fn(&T, &T) -> bool,
 {
+    pub fn new(set: HashSet<T>, relation: F) -> Self {
+        Self { set, relation }
+    }
+
     fn relation(&self, a: &T, b: &T) -> bool {
         (self.relation)(a, b)
     }
@@ -102,32 +106,79 @@ where
     }
 }
 
-#[test]
-fn powerset_lattice() {
-    let mut set: HashSet<Vec<i32>> = HashSet::new();
-    set.insert(vec![1, 2, 3]);
-    set.insert(vec![1, 2]);
-    set.insert(vec![1, 3]);
-    set.insert(vec![2, 3]);
-    set.insert(vec![1]);
-    set.insert(vec![2]);
-    set.insert(vec![3]);
-    set.insert(vec![]);
-    let subset_eq = |a: &Vec<i32>, b: &Vec<i32>| a.iter().all(|el| b.contains(el));
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-    let lattice = Lattice {
-        set,
-        relation: subset_eq,
-    };
+    #[test]
+    fn powerset_lattice() {
+        let mut set: HashSet<Vec<i32>> = HashSet::new();
+        set.insert(vec![1, 2, 3]);
+        set.insert(vec![1, 2]);
+        set.insert(vec![1, 3]);
+        set.insert(vec![2, 3]);
+        set.insert(vec![1]);
+        set.insert(vec![2]);
+        set.insert(vec![3]);
+        set.insert(vec![]);
 
-    // For the powerset lattice, join should equal the union operation
-    assert_eq!(lattice.join(&vec![1], &vec![2]), vec![1, 2]);
-    assert_eq!(lattice.join(&vec![1, 3], &vec![2]), vec![1, 2, 3]);
+        let lattice = Lattice::new(set, |a: &Vec<i32>, b: &Vec<i32>| {
+            a.iter().all(|el| b.contains(el))
+        });
 
-    // For the powerset lattice, meet should equal the intersection operation
-    assert_eq!(lattice.meet(&vec![1], &vec![2]), vec![]);
-    assert_eq!(lattice.meet(&vec![1, 2], &vec![2, 3]), vec![2]);
+        // For the powerset lattice, join should equal the union operation
+        assert_eq!(lattice.join(&vec![1], &vec![2]), vec![1, 2]);
+        assert_eq!(lattice.join(&vec![1, 3], &vec![2]), vec![1, 2, 3]);
 
-    assert_eq!(lattice.top(), vec![1, 2, 3]);
-    assert_eq!(lattice.bottom(), vec![]);
+        // For the powerset lattice, meet should equal the intersection operation
+        assert_eq!(lattice.meet(&vec![1], &vec![2]), vec![]);
+        assert_eq!(lattice.meet(&vec![1, 2], &vec![2, 3]), vec![2]);
+
+        assert_eq!(lattice.top(), vec![1, 2, 3]);
+        assert_eq!(lattice.bottom(), vec![]);
+    }
+
+    #[derive(Ord, PartialOrd, Eq, PartialEq, Hash, Clone, Debug)]
+    enum Sign {
+        Top,
+        Plus,
+        Minus,
+        EmptySet,
+        Bottom,
+    }
+
+    #[test]
+    fn sign_lattice() {
+        let mut set: HashSet<Sign> = HashSet::new();
+        set.insert(Sign::Plus);
+        set.insert(Sign::Minus);
+        set.insert(Sign::EmptySet);
+        set.insert(Sign::Top);
+        set.insert(Sign::Bottom);
+
+        let lattice = Lattice::new(set, |a: &Sign, b: &Sign| {
+            if b == &Sign::Top {
+                true
+            } else if b == &Sign::Plus || b == &Sign::Minus || b == &Sign::EmptySet {
+                if a == b || a == &Sign::Bottom {
+                    true
+                } else {
+                    false
+                }
+            } else {
+                false
+            }
+        });
+
+        // For the powerset lattice, join should equal the union operation
+        assert_eq!(lattice.join(&Sign::Plus, &Sign::Minus), Sign::Top);
+        assert_eq!(lattice.join(&Sign::Bottom, &Sign::Plus), Sign::Plus);
+
+        // For the powerset lattice, meet should equal the intersection operation
+        assert_eq!(lattice.meet(&Sign::Plus, &Sign::Minus), Sign::Bottom);
+        assert_eq!(lattice.meet(&Sign::Top, &Sign::Plus), Sign::Plus);
+
+        assert_eq!(lattice.top(), Sign::Top);
+        assert_eq!(lattice.bottom(), Sign::Bottom);
+    }
 }
