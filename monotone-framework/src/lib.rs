@@ -19,3 +19,47 @@
 //! LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 //! OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 //! SOFTWARE.
+
+use lattice::{BinaryRelation, JoinSemilattice, Lattice};
+
+pub struct MonotoneFramework<T: BinaryRelation> {
+    lattice: Lattice<T>,
+    nodes: Vec<Node<T>>,
+}
+
+impl<T: BinaryRelation> MonotoneFramework<T> {
+    fn worklist(&mut self, init: T) {
+        for node in self.nodes.iter_mut() {
+            node.value = self.lattice.bottom();
+        }
+        let start_node = init;
+        let mut worklist: Vec<_> = self.nodes.iter().cloned().collect();
+
+        while let Some(mut node) = worklist.pop() {
+            let new_value = node.transfer();
+            for next in node.successors() {
+                let old_value = next.value.clone();
+                if !new_value.relation(&old_value) {
+                    next.value = self.lattice.join(&old_value, &new_value);
+                    worklist.push(next.clone());
+                }
+            }
+        }
+    }
+}
+
+#[derive(Clone)]
+pub struct Node<T: BinaryRelation> {
+    value: T,
+    successors: Vec<Node<T>>,
+}
+
+impl<T: BinaryRelation> Node<T> {
+    fn successors(&mut self) -> impl Iterator<Item = &mut Self> {
+        self.successors.iter_mut()
+    }
+
+    fn transfer(&self) -> T {
+        self.value.clone()
+    }
+}
