@@ -21,86 +21,113 @@
 //! SOFTWARE.
 #![feature(iterator_fold_self)]
 
-use std::collections::HashSet;
+use std::{collections::HashSet, fmt::Debug};
 
 /// A Lattice is a partial order (T, F) which is both a Lower and an Upper Semilattice.
-#[derive(Clone, Debug)]
-pub struct Lattice<T, F>
-where
-    F: Fn(&T, &T) -> bool,
-{
+pub struct Lattice<T: BinaryRelation> {
     set: HashSet<T>,
-    relation: F,
 }
 
-impl<T, F> Lattice<T, F>
-where
-    F: Fn(&T, &T) -> bool,
-{
-    pub fn new(set: HashSet<T>, relation: F) -> Self {
-        Self { set, relation }
+impl<T: BinaryRelation> Lattice<T> {
+    /// Creating a lattice object fails when the set and relational operator fail to form a valid lattice.
+    /// In concrete terms, this occurs when any doubleton (x, y) fails to either meet or join.
+    pub fn try_new(set: HashSet<T>) -> Option<Self> {
+        let lattice = Self { set: set.clone() };
+        if lattice.try_all() {
+            Some(lattice)
+        } else {
+            None
+        }
     }
 
-    fn relation(&self, a: &T, b: &T) -> bool {
-        (self.relation)(a, b)
+    /// For a lattice to be valid, each doubleton must have a meet and a join.
+    /// The top and bottom must also be unique, i.e. not "equal" in terms of the relation to anything else.
+    /// Ideally, this would be a `const fn` which would error at compile time. Alas.
+    fn try_all(&self) -> bool {
+        for a in &self.set {
+            for b in &self.set {
+                if self.try_join(a, b).is_none() {
+                    eprintln!("{:?} cannot join {:?}", a, b);
+                    return false;
+                }
+                if self.try_meet(a, b).is_none() {
+                    eprintln!("{:?} cannot meet {:?}", a, b);
+                    return false;
+                }
+            }
+        }
+
+        let top = self.top();
+        let bottom = self.bottom();
+
+        self.set.iter().all(|el| {
+            // There is a single top
+            (el.relation(&top) && (el == &top || !top.relation(el)))
+            // There is a single bottom
+                && (bottom.relation(el) && (el == &bottom || !el.relation(&bottom)))
+        })
     }
+
+    fn try_join(&self, a: &T, b: &T) -> Option<&T> {
+        self.set
+            .iter()
+            .filter(|el| a.relation(el) && b.relation(el))
+            .fold_first(|a, b| if a.relation(b) { a } else { b })
+    }
+
+    fn try_meet(&self, a: &T, b: &T) -> Option<&T> {
+        self.set
+            .iter()
+            .filter(|el| el.relation(a) && el.relation(b))
+            .fold_first(|a, b| if b.relation(a) { a } else { b })
+    }
+}
+
+/// The second element of the pair that makes a Lattice.
+pub trait BinaryRelation
+where
+    Self: Debug + Clone + PartialEq,
+{
+    fn relation(&self, other: &Self) -> bool;
 }
 
 /// The Join or Upper Semilattice.
-pub trait JoinSemilattice<'a, T> {
+pub trait JoinSemilattice<T: BinaryRelation> {
     /// Find the least upper bound.
-    fn join(&self, a: &'a T, b: &'a T) -> T;
+    fn join(&self, a: &T, b: &T) -> T;
     fn bottom(&self) -> T;
 }
 
 /// The Meet or Lower Semilattice.
-pub trait MeetSemilattice<'a, T> {
+pub trait MeetSemilattice<T: BinaryRelation> {
     /// Find the greatest lower bound for the doubleton.
-    fn meet(&self, a: &'a T, b: &'a T) -> T;
+    fn meet(&self, a: &T, b: &T) -> T;
     fn top(&self) -> T;
 }
 
-impl<'a, T, F> JoinSemilattice<'a, T> for Lattice<T, F>
-where
-    T: Clone,
-    F: Fn(&T, &T) -> bool,
-{
-    fn join(&self, a: &'a T, b: &'a T) -> T {
-        self.set
-            .iter()
-            .filter(|el| self.relation(a, el) && self.relation(b, el))
-            .fold_first(|a, b| if self.relation(a, b) { a } else { b })
-            .unwrap()
-            .clone()
+impl<T: BinaryRelation> JoinSemilattice<T> for Lattice<T> {
+    fn join(&self, a: &T, b: &T) -> T {
+        self.try_join(a, b).unwrap().clone()
     }
 
     fn bottom(&self) -> T {
         self.set
             .iter()
-            .fold_first(|a, b| if self.relation(a, b) { a } else { b })
+            .fold_first(|a, b| if a.relation(b) { a } else { b })
             .unwrap()
             .clone()
     }
 }
 
-impl<'a, T, F> MeetSemilattice<'a, T> for Lattice<T, F>
-where
-    T: Clone,
-    F: Fn(&T, &T) -> bool,
-{
-    fn meet(&self, a: &'a T, b: &'a T) -> T {
-        self.set
-            .iter()
-            .filter(|el| self.relation(el, a) && self.relation(el, b))
-            .fold_first(|a, b| if self.relation(b, a) { a } else { b })
-            .unwrap()
-            .clone()
+impl<T: BinaryRelation> MeetSemilattice<T> for Lattice<T> {
+    fn meet(&self, a: &T, b: &T) -> T {
+        self.try_meet(a, b).unwrap().clone()
     }
 
     fn top(&self) -> T {
         self.set
             .iter()
-            .fold_first(|a, b| if self.relation(b, a) { a } else { b })
+            .fold_first(|a, b| if b.relation(a) { a } else { b })
             .unwrap()
             .clone()
     }
@@ -122,9 +149,13 @@ mod tests {
         set.insert(vec![3]);
         set.insert(vec![]);
 
-        let lattice = Lattice::new(set, |a: &Vec<i32>, b: &Vec<i32>| {
-            a.iter().all(|el| b.contains(el))
-        });
+        impl BinaryRelation for Vec<i32> {
+            fn relation(&self, other: &Self) -> bool {
+                self.iter().all(|el| other.contains(el))
+            }
+        }
+
+        let lattice = Lattice::try_new(set).unwrap();
 
         // For the powerset lattice, join should equal the union operation
         assert_eq!(lattice.join(&vec![1], &vec![2]), vec![1, 2]);
@@ -147,36 +178,41 @@ mod tests {
         Bottom,
     }
 
+    impl BinaryRelation for Sign {
+        fn relation(&self, other: &Self) -> bool {
+            match (self, other) {
+                (Sign::Top, Sign::Top) => true,
+                (Sign::Top, _) => false,
+                (Sign::Plus, Sign::Top) => true,
+                (Sign::Plus, Sign::Plus) => true,
+                (Sign::Plus, _) => false,
+                (Sign::Minus, Sign::Top) => true,
+                (Sign::Minus, Sign::Minus) => true,
+                (Sign::Minus, _) => false,
+                (Sign::EmptySet, Sign::Top) => true,
+                (Sign::EmptySet, Sign::EmptySet) => true,
+                (Sign::EmptySet, _) => false,
+                (Sign::Bottom, _) => true,
+            }
+        }
+    }
+
     #[test]
     fn sign_lattice() {
         let mut set: HashSet<Sign> = HashSet::new();
+        set.insert(Sign::Top);
         set.insert(Sign::Plus);
         set.insert(Sign::Minus);
         set.insert(Sign::EmptySet);
-        set.insert(Sign::Top);
         set.insert(Sign::Bottom);
 
-        let lattice = Lattice::new(set, |a: &Sign, b: &Sign| {
-            if b == &Sign::Top {
-                true
-            } else if b == &Sign::Plus || b == &Sign::Minus || b == &Sign::EmptySet {
-                if a == b || a == &Sign::Bottom {
-                    true
-                } else {
-                    false
-                }
-            } else {
-                false
-            }
-        });
+        let lattice = Lattice::try_new(set).unwrap();
 
-        // For the powerset lattice, join should equal the union operation
+        assert_eq!(lattice.join(&Sign::Top, &Sign::Bottom), Sign::Top);
         assert_eq!(lattice.join(&Sign::Plus, &Sign::Minus), Sign::Top);
-        assert_eq!(lattice.join(&Sign::Bottom, &Sign::Plus), Sign::Plus);
 
-        // For the powerset lattice, meet should equal the intersection operation
-        assert_eq!(lattice.meet(&Sign::Plus, &Sign::Minus), Sign::Bottom);
-        assert_eq!(lattice.meet(&Sign::Top, &Sign::Plus), Sign::Plus);
+        assert_eq!(lattice.meet(&Sign::Top, &Sign::Bottom), Sign::Bottom);
+        assert_eq!(lattice.meet(&Sign::Plus, &Sign::EmptySet), Sign::Bottom);
 
         assert_eq!(lattice.top(), Sign::Top);
         assert_eq!(lattice.bottom(), Sign::Bottom);
