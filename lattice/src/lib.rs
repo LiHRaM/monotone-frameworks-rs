@@ -136,18 +136,20 @@ impl<T: BinaryRelation> MeetSemilattice<T> for Lattice<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use maplit::hashset;
 
     #[test]
     fn powerset_lattice() {
-        let mut set: HashSet<Vec<i32>> = HashSet::new();
-        set.insert(vec![1, 2, 3]);
-        set.insert(vec![1, 2]);
-        set.insert(vec![1, 3]);
-        set.insert(vec![2, 3]);
-        set.insert(vec![1]);
-        set.insert(vec![2]);
-        set.insert(vec![3]);
-        set.insert(vec![]);
+        let set = hashset! {
+            vec![1, 2, 3],
+            vec![1, 2],
+            vec![1, 3],
+            vec![2, 3],
+            vec![1],
+            vec![2],
+            vec![3],
+            vec![]
+        };
 
         impl BinaryRelation for Vec<i32> {
             fn relation(&self, other: &Self) -> bool {
@@ -167,6 +169,18 @@ mod tests {
 
         assert_eq!(lattice.top(), vec![1, 2, 3]);
         assert_eq!(lattice.bottom(), vec![]);
+    }
+
+    #[test]
+    fn two_tops() {
+        let set: HashSet<Vec<i32>> = hashset![vec![1, 2, 3], vec![2, 3, 4]];
+        assert!(Lattice::try_new(set).is_none());
+    }
+
+    #[test]
+    fn two_bottoms() {
+        let set = hashset![vec![1, 2], vec![1], vec![2]];
+        assert!(Lattice::try_new(set).is_none());
     }
 
     #[derive(Ord, PartialOrd, Eq, PartialEq, Hash, Clone, Debug)]
@@ -199,12 +213,13 @@ mod tests {
 
     #[test]
     fn sign_lattice() {
-        let mut set: HashSet<Sign> = HashSet::new();
-        set.insert(Sign::Top);
-        set.insert(Sign::Plus);
-        set.insert(Sign::Minus);
-        set.insert(Sign::EmptySet);
-        set.insert(Sign::Bottom);
+        let set = hashset! {
+            Sign::Top,
+            Sign::Plus,
+            Sign::Minus,
+            Sign::EmptySet,
+            Sign::Bottom
+        };
 
         let lattice = Lattice::try_new(set).unwrap();
 
