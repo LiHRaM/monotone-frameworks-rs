@@ -23,13 +23,17 @@ jobs:
     - name: Build
       uses: actions-rs/cargo@v1.0.1
       with:
+        toolchain: nightly
         command: build
         args: --verbose
     - name: Test
       uses: actions-rs/cargo@v1.0.1
       with:
+        toolchain: nightly
         command: test
         args: --verbose
     - name: rust-tarpaulin
       uses: actions-rs/tarpaulin@v0.1.0
+      with:
+        toolchain: nightly
 
