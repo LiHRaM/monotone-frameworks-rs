@@ -32,7 +32,7 @@ impl<T: BinaryRelation> Lattice<T> {
     /// Creating a lattice object fails when the set and relational operator fail to form a valid lattice.
     /// In concrete terms, this occurs when any doubleton (x, y) fails to either meet or join.
     pub fn try_new(set: HashSet<T>) -> Option<Self> {
-        let lattice = Self { set: set.clone() };
+        let lattice = Self { set };
         if lattice.try_all() {
             Some(lattice)
         } else {
