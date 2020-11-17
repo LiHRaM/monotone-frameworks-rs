@@ -31,8 +31,8 @@ jobs:
           args: -- -D warnings
   
   build:
+    name: Build
     runs-on: ubuntu-latest
-
     steps:
     - name: rust-toolchain
       uses: actions-rs/toolchain@v1.0.6
@@ -51,6 +51,4 @@ jobs:
       with:
         command: test
         args: --verbose
-    - name: rust-tarpaulin
-      uses: actions-rs/tarpaulin@v0.1.0
 
