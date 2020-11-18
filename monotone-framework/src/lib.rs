@@ -22,44 +22,63 @@
 
 use lattice::{BinaryRelation, JoinSemilattice, Lattice};
 
-pub struct MonotoneFramework<T: BinaryRelation> {
-    lattice: Lattice<T>,
-    nodes: Vec<Node<T>>,
+pub trait Node<T: BinaryRelation + Clone>
+where
+    Self: Clone,
+{
+    fn set_value(&mut self, value: T);
+    fn get_value(&self) -> T;
+    fn transfer(&self) -> T;
+    fn successors(&self) -> Vec<Box<Self>>;
 }
 
-impl<T: BinaryRelation> MonotoneFramework<T> {
-    fn worklist(&mut self, init: T) {
-        for node in self.nodes.iter_mut() {
-            node.value = self.lattice.bottom();
-        }
-        let start_node = init;
-        let mut worklist: Vec<_> = self.nodes.iter().cloned().collect();
+pub struct MonotoneFramework;
 
-        while let Some(mut node) = worklist.pop() {
+/// Use the worklist algorithm to traverse the nodes,
+impl MonotoneFramework {
+    pub fn worklist<N: Node<T>, T: BinaryRelation>(
+        lattice: Lattice<T>,
+        mut nodes: Vec<N>,
+    ) -> Vec<N> {
+        let bottom = lattice.bottom();
+        for node in nodes.iter_mut() {
+            node.set_value(bottom.clone());
+        }
+        let mut worklist = nodes.to_vec();
+        while let Some(node) = worklist.pop() {
             let new_value = node.transfer();
-            for next in node.successors() {
-                let old_value = next.value.clone();
+            for mut next in node.successors() {
+                let old_value = next.get_value();
                 if !new_value.relation(&old_value) {
-                    next.value = self.lattice.join(&old_value, &new_value);
-                    worklist.push(next.clone());
+                    next.set_value(lattice.join(&old_value, &new_value));
+                    worklist.push(*next.clone());
                 }
             }
         }
+        nodes
     }
 }
 
-#[derive(Clone)]
-pub struct Node<T: BinaryRelation> {
-    value: T,
-    successors: Vec<Node<T>>,
-}
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use lattice::Lattice;
+    use lattice_sign::Sign;
+    use maplit::hashset;
 
-impl<T: BinaryRelation> Node<T> {
-    fn successors(&mut self) -> impl Iterator<Item = &mut Self> {
-        self.successors.iter_mut()
-    }
+    #[test]
+    fn sign_analysis() {
+        let lattice = Lattice::try_new(hashset![
+            Sign::Top,
+            Sign::Bottom,
+            Sign::Plus,
+            Sign::Minus,
+            Sign::EmptySet,
+        ])
+        .unwrap();
 
-    fn transfer(&self) -> T {
-        self.value.clone()
+        todo!();
+        // let nodes;
+        // let signs = MonotoneFramework::worklist(lattice, nodes);
     }
 }
