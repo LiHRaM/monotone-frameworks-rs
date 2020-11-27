@@ -42,12 +42,12 @@ jobs:
         override: true
     - uses: actions/checkout@v2
     - name: Build
-      uses: actions-rs/cargo@v1.0.1
+      uses: actions-rs/cargo@v1.0.3
       with:
         command: build
         args: --verbose
     - name: Test
-      uses: actions-rs/cargo@v1.0.1
+      uses: actions-rs/cargo@v1.0.3
       with:
         command: test
         args: --verbose
